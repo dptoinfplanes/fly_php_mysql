@@ -26,13 +26,40 @@ RUN sed -i "s/Listen 80/Listen ${PORT}/" /etc/apache2/ports.conf \
 # -------------------------
 # MySQL dirs
 # -------------------------
-RUN mkdir -p /var/run/mysqld /docker-entrypoint-initdb.d \
- && chown -R mysql:mysql /var/run/mysqld /docker-entrypoint-initdb.d
+RUN mkdir -p /var/run/mysqld /var/lib/mysql /docker-entrypoint-initdb.d \
+ && chown -R mysql:mysql /var/run/mysqld /var/lib/mysql /docker-entrypoint-initdb.d
 
 # -------------------------
-# Copiar SQL de init
+# Copiar init.sql y código PHP
 # -------------------------
 COPY sql/init.sql /docker-entrypoint-initdb.d/init.sql
+COPY src/ /var/www/html/
+
+RUN chown -R www-data:www-data /var/www/html
+
+# -------------------------
+# Script de inicialización de MySQL
+# -------------------------
+RUN printf "#!/bin/bash\n\
+set -e\n\
+if [ ! -d /var/lib/mysql/mysql ]; then\n\
+  echo 'Inicializando MySQL...'\n\
+  mysqld --initialize-insecure --user=mysql\n\
+  mysqld --skip-networking &\n\
+  pid=\$!\n\
+  until mysqladmin ping --silent; do sleep 1; done\n\
+  mysql -u root < /docker-entrypoint-initdb.d/init.sql\n\
+  mysqladmin shutdown\n\
+fi\n" > /usr/local/bin/mysql-init.sh \
+ && chmod +x /usr/local/bin/mysql-init.sh
+
+# -------------------------
+# Wrapper para Supervisor
+# -------------------------
+RUN printf "#!/bin/bash\n\
+/usr/local/bin/mysql-init.sh\n\
+exec /usr/sbin/mysqld\n" > /usr/local/bin/mysql-start.sh \
+ && chmod +x /usr/local/bin/mysql-start.sh
 
 # -------------------------
 # Supervisor config
@@ -41,7 +68,7 @@ RUN mkdir -p /etc/supervisor/conf.d
 
 RUN printf "[supervisord]\nnodaemon=true\n\n\
 [program:mysql]\n\
-command=/usr/sbin/mysqld\n\
+command=/usr/local/bin/mysql-start.sh\n\
 user=mysql\n\
 autorestart=true\n\
 stdout_logfile=/dev/stdout\n\
@@ -52,44 +79,6 @@ autorestart=true\n\
 stdout_logfile=/dev/stdout\n\
 stderr_logfile=/dev/stderr\n" \
 > /etc/supervisor/conf.d/supervisord.conf
-
-# -------------------------
-# Script de init MySQL
-# -------------------------
-RUN printf "#!/bin/bash\n\
-set -e\n\
-if [ ! -d /var/lib/mysql/mysql ]; then\n\
-  echo 'Inicializando MySQL...'\n\
-  mysqld --initialize-insecure --user=mysql\n\
-  mysqld --skip-networking &\n\
-  pid=$!\n\
-  until mysqladmin ping --silent; do sleep 1; done\n\
-  mysql < /docker-entrypoint-initdb.d/init.sql\n\
-  mysqladmin shutdown\n\
-fi\n" > /usr/local/bin/mysql-init.sh \
- && chmod +x /usr/local/bin/mysql-init.sh
-
-# -------------------------
-# Wrapper de MySQL
-# -------------------------
-RUN printf "#!/bin/bash\n\
-/usr/local/bin/mysql-init.sh\n\
-exec /usr/sbin/mysqld\n" > /usr/local/bin/mysql-start.sh \
- && chmod +x /usr/local/bin/mysql-start.sh
-
-# -------------------------
-# Actualizar Supervisor para usar wrapper
-# -------------------------
-RUN sed -i "s|/usr/sbin/mysqld|/usr/local/bin/mysql-start.sh|" \
- /etc/supervisor/conf.d/supervisord.conf
-
-# -------------------------
-# App
-# -------------------------
-WORKDIR /var/www/html
-#COPY . /var/www/html #copia de la raiz 
-COPY src/ /var/www/html/
-RUN chown -R www-data:www-data /var/www/html
 
 EXPOSE 8080
 
