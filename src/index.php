@@ -1,18 +1,13 @@
 <?php
-// --------------------
 // Configuración DB
-// --------------------
-$host = 'localhost';      // o mysql / myapp-mysql.internal
+$host = '127.0.0.1'; // TCP para evitar Permission denied
 $db   = 'app_db';
-$user = 'root';
-$pass = '';
+$user = 'app_user';  // coincide con init.sql
+$pass = 'app_pass';
 $charset = 'utf8mb4';
 
-// --------------------
 // Conexión PDO
-// --------------------
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
-
 try {
     $pdo = new PDO($dsn, $user, $pass, [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
@@ -22,9 +17,7 @@ try {
     die("❌ Error de conexión: " . $e->getMessage());
 }
 
-// --------------------
 // Consulta
-// --------------------
 $sql = "SELECT * FROM users";
 $stmt = $pdo->query($sql);
 $rows = $stmt->fetchAll();
@@ -53,7 +46,6 @@ $rows = $stmt->fetchAll();
             <th><?= htmlspecialchars($col) ?></th>
         <?php endforeach; ?>
     </tr>
-
     <?php foreach ($rows as $row): ?>
         <tr>
             <?php foreach ($row as $value): ?>
