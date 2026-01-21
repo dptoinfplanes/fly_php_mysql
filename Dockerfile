@@ -87,7 +87,8 @@ RUN sed -i "s|/usr/sbin/mysqld|/usr/local/bin/mysql-start.sh|" \
 # App
 # -------------------------
 WORKDIR /var/www/html
-COPY . /var/www/html
+#COPY . /var/www/html #copia de la raiz 
+COPY src/ /var/www/html/
 RUN chown -R www-data:www-data /var/www/html
 
 EXPOSE 8080
